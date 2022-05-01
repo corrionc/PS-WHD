@@ -163,7 +163,8 @@ function Get-WHDTicket {
     }
 }
 
-function Get-WHDRequestTypes {
+function Get-WHDRequestType {
+    
     param(
         $limit
     )
@@ -189,10 +190,34 @@ Function Get-WHDClient {
 }
 
 Function Get-WHDAssetStatus {
+    <#
+.SYNOPSIS
+Get Asset Statuses
+
+.DESCRIPTION
+Returns all possible asset statuses.
+
+#>
     Invoke-WHDRESTMethod -EndpointURL "AssetStatuses"
 }
 
 Function Get-WHDAssetTypes {
+    <#
+.SYNOPSIS
+Get all types of assets. 
+
+.DESCRIPTION
+Returns every type of asset in the helpdesk (desktop, laptop, etc)
+
+.PARAMETER AssetTypeID
+Return the integer asset type (1,2 etc)
+
+.PARAMETER QualifierString
+Search using a qualifier string.  Must be escaped.
+
+.EXAMPLE
+Get-WHDAssetTypes -QualifierString "(assetType like `'*top*`')"
+#>
     param(
         $AssetTypeID,
         $QualifierString
@@ -216,6 +241,35 @@ Function Get-WHDStatusTypes {
 }
 
 Function Get-WHDAsset {
+            <#
+.SYNOPSIS
+Get an asset from WebHelpDesk
+
+.DESCRIPTION
+Return every asset, a specific asset, or search based on a qualifier string 
+
+.PARAMETER AssetID
+Specific integer asset to return
+
+.PARAMETER QualifierString
+Search based on properties of the asset.  Must be escaped, returns a subset of the attributes.
+
+.PARAMETER Limit
+Limit results to N entries, defaults to 100.
+
+.EXAMPLE
+Return every asset in WebHelpDesk ()
+Get-WHDAsset
+
+.EXAMPLE
+Return a specific asset
+Get-WHDAsset 2
+
+.EXAMPLE
+Return all assets with a name like 'Server'
+Get-WHDAsset -QualifierString "(networkName like `'*Server*`')"
+#>
+
     param(
         $AssetID,
         $QualifierString,
@@ -245,6 +299,20 @@ Function Get-WHDAsset {
     Write-Output $responses
 }
 Function Update-WHDAsset {
+        <#
+.SYNOPSIS
+Updates an existing asset
+
+.DESCRIPTION
+Updates an existing asset with new properties
+
+.PARAMETER Asset
+An Asset object, usually obtained from Get-WHDAsset
+
+.EXAMPLE
+Update-WHDAsset $UpdatedAsset
+#>
+
     param(
         $Asset
     )
@@ -252,6 +320,20 @@ Function Update-WHDAsset {
 }
 
 Function New-WHDAsset {
+        <#
+.SYNOPSIS
+Creates a new WHD asset. 
+
+.DESCRIPTION
+Creates a new WHD asset, making sure they type, manufacturer and model exist
+
+.PARAMETER Asset
+A new asset to create. 
+
+.EXAMPLE
+New-WHDAsset $NewAsset
+#>
+
     param(
         $Asset
     )
@@ -269,12 +351,54 @@ Function New-WHDAsset {
 }
 
 Function Remove-WHDAsset {
+    <#
+.SYNOPSIS
+Removes an asset from WebHelpDesk 
+
+.DESCRIPTION
+Deletes a WHD Asset (ie, sets isDeleted to True)
+
+.PARAMETER Asset
+Asset to remove from WebHelpDesk
+
+.EXAMPLE
+Remove-WHDAsset $AssetToBeDeleted
+#>
+
     param(
         $Asset
     )
     Invoke-WHDRESTMethod -EndpointURL "Assets/$($($Asset.id))" -Method "DELETE" -WHDObject $Asset
 }
 Function Get-WHDModel {
+        <#
+.SYNOPSIS
+Get a model from WebHelpDesk
+
+.DESCRIPTION
+Return every model, a specific model, or search based on a qualifier string 
+
+.PARAMETER ModelID
+Specific integer model to return
+
+.PARAMETER QualifierString
+Search based on properties of the model.  Must be escaped.
+
+.PARAMETER Limit
+Limit results to N entries
+
+.EXAMPLE
+Return every model in WebHelpDesk
+Get-WHDModel
+
+.EXAMPLE
+Return a specific model
+Get-WHDModel 2
+
+.EXAMPLE
+Return all models with a name like 'Mac'
+Get-WHDModel -QualifierString "modelName like `'*Mac*`')"
+#>
     param(
         $ModelID,
         $QualifierString,
@@ -312,13 +436,55 @@ Function Update-WHDModel {
 }
 
 Function New-WHDModel {
+            <#
+.SYNOPSIS
+Creates a new model in WebHelpDesk
+
+.DESCRIPTION
+Create a new model in WebHelpDesk.  The AssetType and Manufacturer must already exist. 
+
+.PARAMETER Model
+Model to create
+
+.EXAMPLE
+New-WHDModel $ModelToCreate
+#>
+
     param(
-        $Asset
+        $Model
     )
-    Invoke-WHDRESTMethod -EndpointURL "Models" -Method "POST" -WHDObject $Asset
+    Invoke-WHDRESTMethod -EndpointURL "Models" -Method "POST" -WHDObject $Model
 }
 
 Function Get-WHDManufacturer {
+            <#
+.SYNOPSIS
+Get a manufacturer from WebHelpDesk
+
+.DESCRIPTION
+Return every manufacturer, a specific one, or search based on a qualifier string 
+
+.PARAMETER ManufacturerID
+Specific integer manufacturer to return
+
+.PARAMETER QualifierString
+Search based on properties of the manufacturer.  Must be escaped.
+
+.PARAMETER Limit
+Limit results to N entries
+
+.EXAMPLE
+Return every manufacturer in WebHelpDesk
+Get-WHDManufacturer
+
+.EXAMPLE
+Return a specific model
+Get-WHDManufacturer
+
+.EXAMPLE
+Return all manufacturers with a name like 'Dell'
+Get-WHDManufacturer -QualifierString "(name like `'*Dell*`')"
+#>
     param(
         $ManufacturerID,
         $QualifierString,
@@ -350,6 +516,20 @@ Function Get-WHDManufacturer {
     Write-Output $responses
 }
 Function New-WHDManufacturer {
+                <#
+.SYNOPSIS
+Creates a new manufacturer in WebHelpDesk
+
+.DESCRIPTION
+Create a new manufacturer in WebHelpDesk.
+
+.PARAMETER Manufacturer
+Manufacturer to create
+
+.EXAMPLE
+New-WHDManufacturer $ManufacturerToCreate
+#>
+
     param(
         $Manufacturer
     )
