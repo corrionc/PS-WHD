@@ -5,7 +5,7 @@
   .DESCRIPTION
     
   .LINK
-    API Documentation Here: http://www.solarwinds.com/documentation/webhelpdesk/docs/whd_api_12.1.0/web%20help%20desk%20api.html#common-parameters-paging
+    API Documentation Here: https://documentation.solarwinds.com/archive/pdf/whd/whdapiguide.pdf
   .NOTES
     Authors: Charles Crossan, Collin Corrion, Jake Kidd
   
@@ -15,44 +15,50 @@
 #>
 
 function Connect-WHDService {
+    [CmdletBinding()]
     <#
-    .PARAMETER username
-        API UserName
-    .PARAMETER Password
-        API Password
+    .PARAMETER Credential
+        Credential object.  Use Get-Credential to generate
+    .PARAMETER APIKey 
+        API Key
     .PARAMETER WHDURL
         WebHelpDesk Base URL
+    .EXAMPLE
+        Connect-WHDService -Credential (Get-Credential) -WHDURL "https://helpdesk.contoso.com"
 #>
     param (
-        [parameter(Mandatory = $true)]
+        # [parameter(Mandatory = $true)]
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]
+        $Credential,
         [String]
-        $username,
+        $appApiKey,
         [String]
-        $Password,
-        [String]
-        $apiKey,
+        $apiKeyUsername,
         [Parameter(Mandatory = $true)]
         [String]
         $WHDURL
     )
-    if ($apiKey) {
-        $URI = "$($WHDURL)/helpdesk/WebObjects/Helpdesk.woa/ra/Session?username=$($username)&apiKey=$($apiKey)"
+    if ($Credential) {
+        $URI = "$($WHDURL)/helpdesk/WebObjects/Helpdesk.woa/ra/Session?username=$($Credential.UserName)&password=$($Credential.GetNetworkCredential().Password)"
     }
-    elseif ( $Password) {
-        $URI = "$($WHDURL)/helpdesk/WebObjects/Helpdesk.woa/ra/Session?username=$($username)&password=$($Password)"
+    elseif ($appApiKey) {
+        $URI = "$($WHDURL)/helpdesk/WebObjects/Helpdesk.woa/ra/Session?username=$($apiKeyUsername)&apiKey=$($appApiKey)"
     }
     else {
-        throw "APIKey or Password required"
+        throw "APIKey or credential required"
     }
+    Write-Debug $URI
 
-    $Response = Invoke-RestMethod -Uri $URI  -Method GET -SessionVariable session 
-    Set-Variable -Scope Global -Name "WHDURL" -Value $WHDURL
-    Set-Variable -Scope Global -Name "WHDSessionKey" -Value $Response.sessionKey
-    Set-Variable -Scope Global -Name "WHDUsername" -Value $username
-    Set-Variable -Scope Global -Name "WHDPassword" -Value $Password
-    Set-Variable -Scope Global -Name "WHDapikey" -Value $apiKey
+    $Response = Invoke-RestMethod -Uri $URI  -Method GET -SessionVariable session
+    Set-Variable -Scope Script -Name "WHDURL" -Value $WHDURL
+    Set-Variable -Scope Script -Name "WHDSessionKey" -Value $Response.sessionKey
+    # Set-Variable -Scope Script -Name "WHDUsername" -Value $username
+    # Set-Variable -Scope Script -Name "WHDPassword" -Value $Password
+    Set-Variable -Scope Script -Name "WHDapikey" -Value $appApiKey
     Set-Variable -Scope Global -Name "WHDSessionKeyExpiration" -Value $(Get-Date).AddSeconds(1800)
-    Set-Variable -Scope Global -Name "WHDWebSession" -Value $session
+    Set-Variable -Scope Script -Name "WHDWebSession" -Value $session
 }
 
 function Disconnect-WHDService {
@@ -60,34 +66,34 @@ function Disconnect-WHDService {
     Clear-Variable WHDSession* -Scope Global #Clear WHDSessionKey & WHDSessionKeyExpiration
 }
 Function Invoke-WHDRESTMethod {
+    [CmdletBinding()]
     param(
         $EndpointURL,
         $Method = "GET",
         $Page = 1,
         [System.Collections.Hashtable]
         $Parameters = @{ },
-        $WHDObject,
-        $Verbose
+        $WHDObject
     )
-    if ( test-path variable:global:"WHDURL") {
-        if ( (test-path variable:global:"WHDUsername") -and ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
+    if ( test-path variable:script:"WHDURL") {
+        if ( (test-path variable:script:"WHDUsername") -and ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
             $Parameters.username = $($(Get-Variable -Name "WHDUsername").value)
         }
         elseif ( ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
             throw "WHDUsername required"
         }
 
-        if ((test-path variable:global:"WHDSessionKey") -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
+        if ((test-path variable:script:"WHDSessionKey") -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
             $Parameters.sessionKey = $($(Get-Variable -Name "WHDSessionKey").value)
         }
-        elseif ((test-path variable:global:"WHDapikey") -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDapikey").value))) -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
+        elseif ((test-path variable:script:"WHDapikey") -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDapikey").value))) -and -not ([string]::IsNullOrEmpty($($(Get-Variable -Name "WHDSessionKey").value)))) {
             $Parameters.apiKey = $($(Get-Variable -Name "WHDapikey").value)
         }
-        elseif (test-path variable:global:"WHDPassword") {
+        elseif (test-path variable:script:"WHDPassword") {
             $Parameters.password = $($(Get-Variable -Name "WHDPassword").value)
         }
         else {
-            throw "APIKey, SessionKey or Password required"
+            throw "APIKey, SessionKey or Credential required"
         }
     }
     else {
@@ -95,10 +101,12 @@ Function Invoke-WHDRESTMethod {
     }
     $parameters.page = $Page
     $URI = "$($(Get-Variable -Name "WHDURL").Value)/helpdesk/WebObjects/Helpdesk.woa/ra/$($EndpointURL)"
+    Write-Verbose "Calling $URI"
     $parameterString = ($Parameters.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join '&'
     if ($parameterString) {
         $URI += "?$($parameterString)"
     }
+    Write-Debug "Calling $URI"
     if ($Verbose) { Write-Warning  $URI }
     if (-not [string]::IsNullOrEmpty($WHDObject)) {
         $ObjectJSON = ConvertTo-Json $WHDObject -Depth 4
@@ -106,6 +114,7 @@ Function Invoke-WHDRESTMethod {
     }
     else {
         Invoke-RestMethod -uri $URI -Method $Method  -WebSession $WHDWebSession
+        Set-Variable -Scope Global -Name "WHDSessionKeyExpiration" -Value $(Get-Date).AddSeconds(1800)
     }
     
     
@@ -164,7 +173,18 @@ function Get-WHDTicket {
 }
 
 function Get-WHDRequestType {
-    
+    <#
+.SYNOPSIS
+Get all request types
+
+.PARAMETER limit
+Limit to first N results, 100 by default
+
+.DESCRIPTION
+Returns all service requests types.
+
+#>
+
     param(
         $limit
     )
@@ -180,6 +200,19 @@ function Get-WHDRequestType {
 }
 
 Function Get-WHDClient {
+        <#
+.SYNOPSIS
+Get a WebHelpDesk client. 
+
+.DESCRIPTION
+Returns clients matching the username
+
+.PARAMETER UserName
+An email address to search for
+
+.EXAMPLE
+Get-Client -UserName user@contoso.com
+#>
     param(
         $UserName
     )
@@ -201,10 +234,10 @@ Returns all possible asset statuses.
     Invoke-WHDRESTMethod -EndpointURL "AssetStatuses"
 }
 
-Function Get-WHDAssetTypes {
+Function Get-WHDAssetType {
     <#
 .SYNOPSIS
-Get all types of assets. 
+Get all modifiable asset types. 
 
 .DESCRIPTION
 Returns every type of asset in the helpdesk (desktop, laptop, etc)
@@ -216,7 +249,7 @@ Return the integer asset type (1,2 etc)
 Search using a qualifier string.  Must be escaped.
 
 .EXAMPLE
-Get-WHDAssetTypes -QualifierString "(assetType like `'*top*`')"
+Get-WHDAssetType -QualifierString "(assetType like `'*top*`')"
 #>
     param(
         $AssetTypeID,
@@ -236,12 +269,21 @@ Get-WHDAssetTypes -QualifierString "(assetType like `'*top*`')"
     Invoke-WHDRESTMethod -EndpointURL $URI -Parameters $parameters
 }
 
-Function Get-WHDStatusTypes {
+Function Get-WHDStatusType {
+        <#
+.SYNOPSIS
+Get all ticket status types. 
+
+.DESCRIPTION
+Returns every type of ticket in the helpdesk (open, closed, etc)
+
+#>
     Invoke-WHDRESTMethod -EndpointURL "StatusTypes"
 }
 
 Function Get-WHDAsset {
-            <#
+    [CmdletBinding()]
+    <#
 .SYNOPSIS
 Get an asset from WebHelpDesk
 
@@ -253,6 +295,9 @@ Specific integer asset to return
 
 .PARAMETER QualifierString
 Search based on properties of the asset.  Must be escaped, returns a subset of the attributes.
+
+.PARAMETER Style
+Specify the amount of detail to return, short or detailed
 
 .PARAMETER Limit
 Limit results to N entries, defaults to 100.
@@ -273,9 +318,11 @@ Get-WHDAsset -QualifierString "(networkName like `'*Server*`')"
     param(
         $AssetID,
         $QualifierString,
+        $Style = "short",
         $limit = 10
     )
     $parameters = @{ }
+    $parameters.style = $style
     if ($AssetID) {
         $URI = "Assets/$($AssetID)"
     }
@@ -299,7 +346,8 @@ Get-WHDAsset -QualifierString "(networkName like `'*Server*`')"
     Write-Output $responses
 }
 Function Update-WHDAsset {
-        <#
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+    <#
 .SYNOPSIS
 Updates an existing asset
 
@@ -316,11 +364,14 @@ Update-WHDAsset $UpdatedAsset
     param(
         $Asset
     )
-    Invoke-WHDRESTMethod -EndpointURL "Assets/$($($Asset.id))" -Method "PUT" -WHDObject $Asset
+    if ($PSCmdlet.ShouldProcess("$($Asset.serialNumber)", "PUT"))
+    { Invoke-WHDRESTMethod -EndpointURL "Assets/$($($Asset.id))" -Method "PUT" -WHDObject $Asset }
+    
 }
 
 Function New-WHDAsset {
-        <#
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+    <#
 .SYNOPSIS
 Creates a new WHD asset. 
 
@@ -346,11 +397,14 @@ New-WHDAsset $NewAsset
     
     try { Get-WHDModel $instance.model.id }
     catch { Write-Error "Model not found in WHD" -ErrorAction Stop }
-    
-    Invoke-WHDRESTMethod -EndpointURL "Assets" -Method "POST" -WHDObject $Asset
+
+    if ($PSCmdlet.ShouldProcess("$($Asset.serialNumber)", "POST")) {
+        Invoke-WHDRESTMethod -EndpointURL "Assets" -Method "POST" -WHDObject $Asset
+    }
 }
 
 Function Remove-WHDAsset {
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     <#
 .SYNOPSIS
 Removes an asset from WebHelpDesk 
@@ -368,10 +422,12 @@ Remove-WHDAsset $AssetToBeDeleted
     param(
         $Asset
     )
-    Invoke-WHDRESTMethod -EndpointURL "Assets/$($($Asset.id))" -Method "DELETE" -WHDObject $Asset
+    if ($PSCmdlet.ShouldProcess("$($Asset.serialNumber)", "DELETE")) {
+        Invoke-WHDRESTMethod -EndpointURL "Assets/$($($Asset.id))" -Method "DELETE" -WHDObject $Asset
+    }
 }
 Function Get-WHDModel {
-        <#
+    <#
 .SYNOPSIS
 Get a model from WebHelpDesk
 
@@ -436,7 +492,8 @@ Function Update-WHDModel {
 }
 
 Function New-WHDModel {
-            <#
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+    <#
 .SYNOPSIS
 Creates a new model in WebHelpDesk
 
@@ -453,11 +510,13 @@ New-WHDModel $ModelToCreate
     param(
         $Model
     )
-    Invoke-WHDRESTMethod -EndpointURL "Models" -Method "POST" -WHDObject $Model
+    if ($PSCmdlet.ShouldProcess("$($Model.modelName)", "POST")) {
+        Invoke-WHDRESTMethod -EndpointURL "Models" -Method "POST" -WHDObject $Model
+    }
 }
 
 Function Get-WHDManufacturer {
-            <#
+    <#
 .SYNOPSIS
 Get a manufacturer from WebHelpDesk
 
@@ -516,7 +575,8 @@ Get-WHDManufacturer -QualifierString "(name like `'*Dell*`')"
     Write-Output $responses
 }
 Function New-WHDManufacturer {
-                <#
+    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+    <#
 .SYNOPSIS
 Creates a new manufacturer in WebHelpDesk
 
@@ -533,14 +593,35 @@ New-WHDManufacturer $ManufacturerToCreate
     param(
         $Manufacturer
     )
-    Invoke-WHDRESTMethod -EndpointURL "Manufacturers" -Method "POST" -WHDObject $Manufacturer
+    if ($PSCmdlet.ShouldProcess("$($Manufacturer.fullName)", "POST"))
+    { Invoke-WHDRESTMethod -EndpointURL "Manufacturers" -Method "POST" -WHDObject $Manufacturer }
+
 }
 
 Function Get-WHDRoom {
+    [CmdletBinding()]
+    <#
+.SYNOPSIS
+Get information about the rooms (where it happened)
+
+.PARAMETER RoomID
+Return a specific room
+
+.PARAMETER QualifierString
+Search based on properties of the room.  Must be escaped.
+
+.PARAMETER Limit
+Limit results to N entries
+
+.DESCRIPTION
+Returns rooms defined in WebHelpDesk.
+
+#>
+
     param(
         $RoomID,
         $QualifierString,
-        $limit = 10
+        $limit = 100
     )
     $parameters = @{ }
     if ($RoomID) {
@@ -549,8 +630,22 @@ Function Get-WHDRoom {
     elseif ($QualifierString) {
         $parameters.qualifier = $([System.Web.HttpUtility]::UrlEncode($QualifierString))
         $URI = "Rooms"
-        Write-Output "Qualifier String"
     }
-    # $responses = @()
-    Invoke-WHDRESTMethod -EndpointURL $URI -Parameters $parameters
+    else {
+        $URI = "Rooms"
+    }
+    $parameters.limit = $limit
+    $responses = @()
+    $page = 1;
+    $hasMore = $true
+    while ($hasMore -and $responses.count -lt $limit) {
+        $temp = Invoke-WHDRESTMethod -EndpointURL $URI -Parameters $parameters -Page $page
+        if ($temp -isnot [system.array] -or $temp.count -eq 0 ) {
+            $hasMore = $false
+        }
+        $responses += $temp
+        $page += 1
+    }
+
+    
 }
